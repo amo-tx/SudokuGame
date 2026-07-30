@@ -1,4 +1,4 @@
-name: Build APK
+﻿name: Build APK
 
 on:
   push:
@@ -24,6 +24,10 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+
+    - name: Generate debug keystore
+      run: |
+        keytool -genkey -v -keystore ~/.android/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" -noprompt
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
@@ -54,7 +58,6 @@ jobs:
       with:
         tag_name: ${{ github.ref_name }}
         files: |
-          app/build/outputs/apk/debug/*.apk
           app/build/outputs/apk/release/*.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
