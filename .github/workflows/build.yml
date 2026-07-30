@@ -63,32 +63,28 @@ jobs:
 
     - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ github.ref_name }}
-        name: ${{ github.ref_name }} - Sudoku Game
-        body: |
-          ## Sudoku Game ${{ github.ref_name }}
-
-          ### Features
-          - Sudoku generation and solving (backtracking + MRV heuristic)
-          - Handwritten digit recognition (ONNX CNN, camera/gallery)
-          - Light/Dark/System theme switching
-          - Pause menu, save/load game state
-          - 3-mistake game over, real-time hints
-
-          ### Tech Stack
-          - Kotlin + MVVM
-          - ONNX Runtime
-          - Material Design DayNight
-          - GitHub Actions CI/CD
-
-          ### Download
-          - `sudoku-game-${{ github.ref_name }}.apk` - Release APK
-          - Minimum: Android 7.0 (API 24)
-        files: |
-          app/build/outputs/apk/release/sudoku-game-*.apk
-        draft: false
-        prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release delete ${{ github.ref_name }} --yes --cleanup-tag || true
+        gh release create ${{ github.ref_name }} \
+          --title "${{ github.ref_name }} - Sudoku Game" \
+          --notes "## Sudoku Game ${{ github.ref_name }}
+
+        ### Features
+        - Sudoku generation and solving (backtracking + MRV heuristic)
+        - Handwritten digit recognition (ONNX CNN, camera/gallery)
+        - Light/Dark/System theme switching
+        - Pause menu, save/load game state
+        - 3-mistake game over, real-time hints
+
+        ### Tech Stack
+        - Kotlin + MVVM
+        - ONNX Runtime
+        - Material Design DayNight
+        - GitHub Actions CI/CD
+
+        ### Download
+        - sudoku-game-${{ github.ref_name }}.apk - Release APK
+        - Minimum: Android 7.0 (API 24)" \
+          app/build/outputs/apk/release/sudoku-game-*.apk
