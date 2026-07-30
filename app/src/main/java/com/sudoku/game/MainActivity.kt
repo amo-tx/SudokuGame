@@ -1,22 +1,37 @@
 package com.sudoku.game
 
+import android.Manifest
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.sudoku.game.databinding.ActivityMainBinding
+import com.sudoku.game.engine.SudokuRecognizer
 import com.sudoku.game.model.Difficulty
 import com.sudoku.game.viewmodel.GameViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -26,6 +41,47 @@ class MainActivity : AppCompatActivity() {
     private val numberViews = mutableListOf<View>()
 
     private lateinit var prefs: SharedPreferences
+
+    // Image recognition
+    private var recognizer: SudokuRecognizer? = null
+    private var cameraImageUri: Uri? = null
+
+    // Activity result launchers
+    private val cameraLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && cameraImageUri != null) {
+            val bitmap = loadBitmapFromUri(cameraImageUri!!)
+            if (bitmap != null) {
+                recognizeSudoku(bitmap)
+            } else {
+                Toast.makeText(this, "无法加载图片", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private val galleryLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val bitmap = loadBitmapFromUri(uri)
+            if (bitmap != null) {
+                recognizeSudoku(bitmap)
+            } else {
+                Toast.makeText(this, "无法加载图片", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startCamera()
+        } else {
+            Toast.makeText(this, getString(R.string.camera_permission_denied), Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Apply saved theme before creating views
@@ -42,6 +98,7 @@ class MainActivity : AppCompatActivity() {
         setupBoardView()
         setupControlButtons()
         setupThemeButton()
+        setupScanButton()
         observeViewModel()
 
         // Show start dialog on launch (don't auto-start)
@@ -173,8 +230,169 @@ class MainActivity : AppCompatActivity() {
             }
             prefs.edit().putInt("theme_mode", newMode).apply()
             AppCompatDelegate.setDefaultNightMode(newMode)
-            // Activity will be recreated automatically by the system
         }
+    }
+
+    /**
+     * Set up scan button - opens dialog to choose camera or gallery
+     */
+    private fun setupScanButton() {
+        binding.btnScan.setOnClickListener {
+            showScanSourceDialog()
+        }
+    }
+
+    /**
+     * Show dialog to choose image source: camera or gallery
+     */
+    private fun showScanSourceDialog() {
+        val options = arrayOf(getString(R.string.take_photo), getString(R.string.choose_from_gallery))
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.scan_sudoku))
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> checkCameraPermissionAndStart()
+                    1 -> startGallery()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /**
+     * Check camera permission and start camera if granted
+     */
+    private fun checkCameraPermissionAndStart() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED) {
+            startCamera()
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    /**
+     * Start camera to take a photo
+     */
+    private fun startCamera() {
+        val imageFile = File(cacheDir, "images/sudoku_camera.jpg")
+        imageFile.parentFile?.mkdirs()
+        cameraImageUri = FileProvider.getUriForFile(
+            this,
+            "com.sudoku.game.fileprovider",
+            imageFile
+        )
+        cameraLauncher.launch(cameraImageUri!!)
+    }
+
+    /**
+     * Start gallery to pick an image
+     */
+    private fun startGallery() {
+        galleryLauncher.launch("image/*")
+    }
+
+    /**
+     * Load Bitmap from Uri, with size optimization
+     */
+    private fun loadBitmapFromUri(uri: Uri): Bitmap? {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri) ?: return null
+            // First decode bounds to check size
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeStream(inputStream, null, options)
+            inputStream.close()
+
+            // Calculate sample size to keep image manageable
+            val maxDim = 1200
+            var sampleSize = 1
+            while (options.outWidth / sampleSize > maxDim || options.outHeight / sampleSize > maxDim) {
+                sampleSize *= 2
+            }
+
+            val inputStream2 = contentResolver.openInputStream(uri) ?: return null
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+            }
+            val bitmap = BitmapFactory.decodeStream(inputStream2, null, decodeOptions)
+            inputStream2.close()
+            bitmap
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Recognize Sudoku from bitmap image
+     * Shows progress dialog and runs recognition in background
+     */
+    private fun recognizeSudoku(bitmap: Bitmap) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.scan_sudoku))
+            .setMessage(getString(R.string.recognizing))
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    if (recognizer == null) {
+                        recognizer = SudokuRecognizer.create(applicationContext)
+                    }
+                    recognizer!!.recognize(bitmap)
+                } catch (e: Exception) {
+                    SudokuRecognizer.RecognitionResult(
+                        Array(9) { IntArray(9) },
+                        false,
+                        "识别出错: ${e.message}"
+                    )
+                }
+            }
+
+            progressDialog.dismiss()
+
+            if (result.success) {
+                showRecognitionResultDialog(result.board, result.message)
+            } else {
+                Toast.makeText(this@MainActivity, result.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /**
+     * Show recognition result dialog for user confirmation
+     */
+    private fun showRecognitionResultDialog(board: Array<IntArray>, message: String) {
+        // Build display string
+        val sb = StringBuilder()
+        sb.append("$message\n\n")
+        sb.append("┌───────┬───────┬───────┐\n")
+        for (r in 0..8) {
+            sb.append("│ ")
+            for (c in 0..8) {
+                val v = board[r][c]
+                sb.append(if (v > 0) "$v " else "· ")
+                if (c % 3 == 2 && c < 8) sb.append("│ ")
+            }
+            sb.append("│\n")
+            if (r % 3 == 2 && r < 8) {
+                sb.append("├───────┼───────┼───────┤\n")
+            }
+        }
+        sb.append("└───────┴───────┴───────┘")
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.recognition_result))
+            .setMessage(sb.toString())
+            .setPositiveButton(getString(R.string.apply_recognized_board)) { _, _ ->
+                viewModel.loadBoard(board)
+                Toast.makeText(this, "已加载识别的数独", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     /**

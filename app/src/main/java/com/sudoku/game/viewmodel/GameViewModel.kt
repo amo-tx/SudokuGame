@@ -427,7 +427,41 @@ class GameViewModel : ViewModel() {
         _notes.value = currentNotes
     }
 
-    // ---- Timer ----
+
+    /**
+     * 从识别结果加载数独棋盘
+     * 非零单元格标记为给定数字，并计算完整解
+     */
+    fun loadBoard(puzzle: Array<IntArray>) {
+        _isGenerating.value = true
+        stopTimer()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            // 尝试求解识别到的棋盘
+            val result = solver.solve(puzzle)
+            val sol = if (result.success) result.board else null
+
+            withContext(Dispatchers.Main) {
+                solution = sol
+
+                _board.value = puzzle
+                _given.value = Array(9) { r -> BooleanArray(9) { c -> puzzle[r][c] != 0 } }
+                _notes.value = Array(81) { mutableSetOf<Int>() }
+                _selectedCell.value = null
+                _selectedNumber.value = 0
+                _errorCells.value = emptySet()
+                _hintCell.value = null
+                _isCompleted.value = false
+                _isNoteMode.value = false
+                _mistakeCount.value = 0
+                _elapsedSeconds.value = 0
+                _isGenerating.value = false
+
+                updateRemainingCounts(puzzle)
+                startTimer()
+            }
+        }
+    }\n    // ---- Timer ----
 
     private fun startTimer() {
         if (timerStarted) return
