@@ -45,7 +45,7 @@ class SudokuBoardView @JvmOverloads constructor(
             invalidate()
         }
 
-    var notes: Array<MutableSet<Int>> = Array(81) { mutableSetOf() }
+    var notes: Array<MutableSet<Int>> = Array(81) { mutableSetOf<Int>() }
         set(value) {
             field = value
             invalidate()

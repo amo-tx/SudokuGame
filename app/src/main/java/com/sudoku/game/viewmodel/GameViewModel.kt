@@ -61,7 +61,7 @@ class GameViewModel : ViewModel() {
     private val _given = MutableLiveData(Array(9) { BooleanArray(9) })
     val given: LiveData<Array<BooleanArray>> = _given
 
-    private val _notes = MutableLiveData(Array(81) { mutableSetOf() })
+    private val _notes = MutableLiveData(Array(81) { mutableSetOf<Int>() })
     val notes: LiveData<Array<MutableSet<Int>>> = _notes
 
     private val _selectedCell = MutableLiveData<Pair<Int, Int>?>(null)
@@ -125,7 +125,7 @@ class GameViewModel : ViewModel() {
 
                 _board.value = puzzle
                 _given.value = Array(9) { r -> BooleanArray(9) { c -> puzzle[r][c] != 0 } }
-                _notes.value = Array(81) { mutableSetOf() }
+                _notes.value = Array(81) { mutableSetOf<Int>() }
                 _selectedCell.value = null
                 _selectedNumber.value = 0
                 _errorCells.value = emptySet()
