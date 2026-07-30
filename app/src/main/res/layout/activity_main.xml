@@ -44,7 +44,7 @@
             android:id="@+id/btnTheme"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:src="@android:drawable/ic_menu_day_of_week"
+            android:src="@drawable/ic_theme"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/theme_light"
             app:tint="@color/toolbar_text" />
