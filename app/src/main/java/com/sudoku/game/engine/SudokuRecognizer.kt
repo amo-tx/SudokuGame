@@ -555,8 +555,7 @@ class SudokuRecognizer private constructor(
             }
         }
 
-        val shape = longArrayOf(batchSize.toLong(), 1, IMG_SIZE.toLong(), IMG_SIZE.toLong())
-        val inputTensor = OnnxTensor.createTensor(env!!, inputData as Any, shape)
+        val inputTensor = OnnxTensor.createTensor(env!!, inputData)
         val output = session.run(mapOf(inputName to inputTensor))
         
         // Output shape: [batch, 10]
