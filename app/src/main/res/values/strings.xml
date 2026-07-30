@@ -47,4 +47,7 @@
     <string name="difficulty">难度</string>
     <string name="time_used">用时</string>
     <string name="error_count">错误</string>
+    <string name="pause">暂停</string>
+    <string name="paused">已暂停</string>
+    <string name="resume">继续游戏</string>
 </resources>

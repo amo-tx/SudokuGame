@@ -106,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         setupControlButtons()
         setupThemeButton()
         setupScanButton()
+        setupPauseButton()
         observeViewModel()
 
         // Show main menu on launch
@@ -114,6 +115,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (!viewModel.isPaused()) {
+            viewModel.pauseGame()
+        }
         viewModel.saveGame()
     }
 
@@ -331,6 +335,50 @@ class MainActivity : AppCompatActivity() {
         binding.btnSolve.setOnClickListener {
             viewModel.solveAll()
         }
+    }
+
+    /**
+     * Set up pause button - shows pause menu
+     */
+    private fun setupPauseButton() {
+        binding.btnPause.setOnClickListener {
+            if (viewModel.isPaused()) {
+                showPauseMenu()
+            } else {
+                viewModel.pauseGame()
+                showPauseMenu()
+            }
+        }
+    }
+
+    /**
+     * 显示暂停菜单：继续游戏 / 新游戏 / 主菜单
+     */
+    private fun showPauseMenu() {
+        val time = formatTime(viewModel.elapsedSeconds.value ?: 0)
+        val mistakes = viewModel.mistakeCount.value ?: 0
+        val difficulty = viewModel.difficulty.value?.label ?: ""
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.paused)
+            .setMessage("${getString(R.string.difficulty)}：$difficulty\n${getString(R.string.time_used)}：$time\n${getString(R.string.error_count)}：$mistakes/${GameViewModel.MAX_MISTAKES}")
+            .setPositiveButton(R.string.resume) { _, _ ->
+                viewModel.resumeGame()
+            }
+            .setNegativeButton(R.string.new_game) { _, _ ->
+                viewModel.resumeGame()
+                showDifficultyDialog { difficulty ->
+                    binding.spinnerDifficulty.setSelection(difficulty.ordinal)
+                    viewModel.newGame(difficulty)
+                }
+            }
+            .setNeutralButton(R.string.back_to_menu) { _, _ ->
+                viewModel.resumeGame()
+                viewModel.saveGame()
+                showMainMenu()
+            }
+            .setCancelable(false)
+            .show()
     }
 
     /**
@@ -605,6 +653,11 @@ class MainActivity : AppCompatActivity() {
         viewModel.isHinting.observe(this) { isHinting ->
             binding.btnHint.isEnabled = !isHinting
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 如果游戏被系统 onPause 暂停，不自动恢复（等用户从暂停菜单恢复）
     }
 
     // ================================================================

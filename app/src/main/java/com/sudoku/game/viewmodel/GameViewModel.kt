@@ -94,6 +94,31 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var timerRunnable: Runnable? = null
     private var timerStarted = false
     private var gameActive = false
+    private var isPaused = false
+
+    // ================================================================
+    // 暂停 / 恢复
+    // ================================================================
+
+    /**
+     * 暂停游戏：停止计时器，禁止用户操作
+     */
+    fun pauseGame() {
+        if (!gameActive || _isCompleted.value == true || _isGameOver.value == true) return
+        isPaused = true
+        stopTimer()
+    }
+
+    /**
+     * 恢复游戏：重新开始计时器
+     */
+    fun resumeGame() {
+        if (!isPaused) return
+        isPaused = false
+        startTimer()
+    }
+
+    fun isPaused(): Boolean = isPaused
 
     // ================================================================
     // 新游戏 / 读档 / 加载识别棋盘
@@ -105,6 +130,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun newGame(difficulty: Difficulty) {
         _isGenerating.value = true
         _isGameOver.value = false
+        isPaused = false
         _difficulty.value = difficulty
         stopTimer()
 
@@ -126,6 +152,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun loadBoard(puzzle: Array<IntArray>) {
         _isGenerating.value = true
         _isGameOver.value = false
+        isPaused = false
         stopTimer()
 
         viewModelScope.launch(Dispatchers.Main) {
@@ -224,7 +251,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     // ================================================================
 
     fun selectCell(row: Int, col: Int) {
-        if (_isCompleted.value == true || _isGameOver.value == true) return
+        if (_isCompleted.value == true || _isGameOver.value == true || isPaused) return
         _selectedCell.value = Pair(row, col)
         val value = _board.value?.get(row)?.get(col) ?: 0
         _selectedNumber.value = value
@@ -232,7 +259,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun inputNumber(num: Int) {
-        if (_isCompleted.value == true || _isGameOver.value == true) return
+        if (_isCompleted.value == true || _isGameOver.value == true || isPaused) return
 
         val cell = _selectedCell.value ?: return
         val (r, c) = cell

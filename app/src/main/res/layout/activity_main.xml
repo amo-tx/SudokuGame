@@ -4,16 +4,21 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:fitsSystemWindows="true"
     android:background="@color/board_bg">
 
-    <!-- Top toolbar -->
+    <!-- Top toolbar - 增大高度和按钮尺寸，避免与系统状态栏重叠 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:background="@color/toolbar_bg"
-        android:padding="12dp"
-        android:gravity="center_vertical">
+        android:paddingStart="16dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:gravity="center_vertical"
+        android:minHeight="56dp">
 
         <TextView
             android:layout_width="0dp"
@@ -24,38 +29,65 @@
             android:textSize="20sp"
             android:textStyle="bold" />
 
+        <!-- 暂停按钮 -->
+        <ImageButton
+            android:id="@+id/btnPause"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_pause"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/pause"
+            android:layout_marginEnd="4dp"
+            app:tint="@color/toolbar_text" />
+
+        <!-- 主菜单按钮 -->
+        <ImageButton
+            android:id="@+id/btnNewGame"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/main_menu"
+            android:layout_marginEnd="4dp"
+            app:tint="@color/toolbar_text" />
+    </LinearLayout>
+
+    <!-- 第二行操作栏：难度/扫描/主题 - 独立一行，触控区域更大 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/toolbar_bg"
+        android:paddingStart="16dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="8dp"
+        android:gravity="center_vertical">
+
         <Spinner
             android:id="@+id/spinnerDifficulty"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
             android:background="@android:color/transparent"
             android:popupBackground="@color/board_bg" />
 
         <ImageButton
-            android:id="@+id/btnNewGame"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@android:drawable/ic_menu_rotate"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/main_menu"
-            app:tint="@color/toolbar_text" />
-
-        <ImageButton
             android:id="@+id/btnScan"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@drawable/ic_scan"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/scan_sudoku"
+            android:layout_marginEnd="4dp"
             app:tint="@color/toolbar_text" />
 
         <ImageButton
             android:id="@+id/btnTheme"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@drawable/ic_theme"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/theme_light"
+            android:contentDescription="@string/theme_settings"
             app:tint="@color/toolbar_text" />
     </LinearLayout>
 
