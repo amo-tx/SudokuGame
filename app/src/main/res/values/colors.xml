@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_500">#6750A4</color>
+    <color name="purple_700">#3700B3</color>
+    <color name="teal_200">#03DAC5</color>
+    <color name="teal_700">#018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Board colors -->
+    <color name="board_bg">#FAFAFA</color>
+    <color name="cell_default">#FFFFFF</color>
+    <color name="cell_highlight">#E3F2FD</color>
+    <color name="cell_same_number">#BBDEFB</color>
+    <color name="cell_selected">#90CAF9</color>
+    <color name="cell_error">#FFCDD2</color>
+    <color name="cell_hint">#FFF9C4</color>
+
+    <color name="grid_line_thin">#E0E0E0</color>
+    <color name="grid_line_thick">#424242</color>
+
+    <color name="text_given">#1A1A1A</color>
+    <color name="text_user">#1565C0</color>
+    <color name="text_error">#C62828</color>
+    <color name="text_note">#757575</color>
+
+    <color name="number_btn_bg">#F5F5F5</color>
+    <color name="number_btn_selected">#E3F2FD</color>
+    <color name="number_btn_disabled">#EEEEEE</color>
+
+    <color name="toolbar_bg">#6750A4</color>
+    <color name="toolbar_text">#FFFFFF</color>
+</resources>

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/board_bg">
+
+    <!-- 顶部工具栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/toolbar_bg"
+        android:padding="12dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/app_name"
+            android:textColor="@color/toolbar_text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinnerDifficulty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
+            android:popupBackground="@color/white" />
+
+        <ImageButton
+            android:id="@+id/btnNewGame"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/new_game"
+            app:tint="@color/toolbar_text" />
+    </LinearLayout>
+
+    <!-- 信息栏：计时器和错误数 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⏱"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/tvTimer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/timer_default"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_given" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical|end">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/mistakes"
+                android:textSize="14sp"
+                android:textColor="@color/text_note" />
+
+            <TextView
+                android:id="@+id/tvMistakes"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="0"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_error" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 数独棋盘 -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp">
+
+        <com.sudoku.game.view.SudokuBoardView
+            android:id="@+id/sudokuBoard"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- 数字候选栏 1-9（代码动态生成按钮） -->
+    <LinearLayout
+        android:id="@+id/numberPad"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="4dp" />
+
+    <!-- 控制按钮栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:gravity="center">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnErase"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/erase"
+            android:textColor="@color/text_given"
+            app:icon="@android:drawable/ic_input_delete"
+            app:iconTint="@color/text_given" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnNote"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/note"
+            android:textColor="@color/text_given"
+            app:icon="@android:drawable/ic_menu_edit"
+            app:iconTint="@color/text_given" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnHint"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/hint"
+            android:textColor="@color/text_given"
+            app:icon="@android:drawable/ic_menu_help"
+            app:iconTint="@color/text_given" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSolve"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/solve"
+            android:textColor="@color/text_given"
+            app:icon="@android:drawable/ic_menu_send"
+            app:iconTint="@color/text_given" />
+    </LinearLayout>
+
+</LinearLayout>

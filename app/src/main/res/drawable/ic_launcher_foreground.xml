@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 数独网格图案 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="
+            M30,30 L78,30
+            M30,46 L78,46
+            M30,62 L78,62
+            M30,78 L78,78
+            M30,30 L30,78
+            M46,30 L46,78
+            M62,30 L62,78
+            M78,30 L78,78" />
+
+    <!-- 粗线 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:pathData="
+            M30,30 L78,30
+            M30,78 L78,78
+            M30,30 L30,78
+            M78,30 L78,78" />
+
+    <!-- 部分数字圆点示意 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M38,38 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0
+            M54,38 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0
+            M70,38 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0
+            M38,54 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0
+            M70,54 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0
+            M38,70 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0
+            M54,70 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0
+            M70,70 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+</vector>
