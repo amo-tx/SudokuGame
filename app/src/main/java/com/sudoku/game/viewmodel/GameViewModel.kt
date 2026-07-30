@@ -461,7 +461,9 @@ class GameViewModel : ViewModel() {
                 startTimer()
             }
         }
-    }\n    // ---- Timer ----
+    }
+
+    // ---- Timer ----
 
     private fun startTimer() {
         if (timerStarted) return

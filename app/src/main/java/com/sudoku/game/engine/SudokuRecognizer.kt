@@ -545,15 +545,21 @@ class SudokuRecognizer private constructor(
         if (cellImgs.isEmpty()) return emptyList()
 
         val batchSize = cellImgs.size
-        // 构建输入张量 [batch, 1, 32, 32]
-        val inputData = FloatArray(batchSize * 1 * IMG_SIZE * IMG_SIZE)
+        // 构建4维输入数组 [batch, 1, 32, 32]
+        val inputData = Array(batchSize) { Array(1) { Array(IMG_SIZE) { FloatArray(IMG_SIZE) } } }
         for (i in cellImgs.indices) {
-            System.arraycopy(cellImgs[i], 0, inputData, i * IMG_SIZE * IMG_SIZE, IMG_SIZE * IMG_SIZE)
+            for (r in 0 until IMG_SIZE) {
+                for (c in 0 until IMG_SIZE) {
+                    inputData[i][0][r][c] = cellImgs[i][r * IMG_SIZE + c]
+                }
+            }
         }
 
         val shape = longArrayOf(batchSize.toLong(), 1, IMG_SIZE.toLong(), IMG_SIZE.toLong())
-        val inputTensor = OnnxTensor.createTensor(env!!, inputData, shape)
+        val inputTensor = OnnxTensor.createTensor(env!!, inputData as Any, shape)
         val output = session.run(mapOf(inputName to inputTensor))
+        
+        // Output shape: [batch, 10]
         val rawOutput = output.get(0).value as Array<FloatArray>
 
         val results = mutableListOf<Pair<Int, Float>>()
