@@ -1,4 +1,4 @@
-name: Build APK
+﻿name: Build APK
 
 on:
   push:
@@ -34,26 +34,56 @@ jobs:
     - name: Build release APK
       run: ./gradlew assembleRelease --no-daemon --console=plain
 
-    - name: Upload debug APK
+    - name: Rename release APK
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        cd app/build/outputs/apk/release/
+        for f in app-release-unsigned.apk app-release.apk; do
+          [ -f "$f" ] && mv "$f" "sudoku-game-${{ github.ref_name }}.apk"
+        done
+
+    - name: Upload debug APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: sudoku-game-debug-apk
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 90
 
-    - name: Upload release APK
+    - name: Upload release APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: sudoku-game-release-apk
         path: app/build/outputs/apk/release/*.apk
         retention-days: 90
 
-    - name: Upload APK to release
+    - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref_name }}
+        name: ${{ github.ref_name }} - Sudoku Game
+        body: |
+          ## Sudoku Game ${{ github.ref_name }}
+
+          ### Features
+          - Sudoku generation and solving (backtracking + MRV heuristic)
+          - Handwritten digit recognition (ONNX CNN, camera/gallery)
+          - Light/Dark/System theme switching
+          - Pause menu, save/load game state
+          - 3-mistake game over, real-time hints
+
+          ### Tech Stack
+          - Kotlin + MVVM
+          - ONNX Runtime
+          - Material Design DayNight
+          - GitHub Actions CI/CD
+
+          ### Download
+          - `sudoku-game-${{ github.ref_name }}.apk` - Release APK
+          - Minimum: Android 7.0 (API 24)
         files: |
-          app/build/outputs/apk/debug/*.apk
+          app/build/outputs/apk/release/sudoku-game-*.apk
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
