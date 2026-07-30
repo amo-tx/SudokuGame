@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="?android:attr/colorBackground">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:textColor="?android:attr/textColorPrimary"
+        android:layout_marginBottom="24dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnMenuNewGame"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/new_game"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"
+        app:cornerRadius="12dp"
+        app:backgroundTint="@color/cell_highlight"
+        app:icon="@android:drawable/ic_menu_rotate"
+        app:iconGravity="textStart" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnMenuContinue"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/continue_game"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"
+        app:cornerRadius="12dp"
+        app:backgroundTint="@color/cell_same_number"
+        app:icon="@android:drawable/ic_menu_recent_history"
+        app:iconGravity="textStart" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnMenuScan"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/scan_sudoku"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"
+        app:cornerRadius="12dp"
+        app:backgroundTint="@color/cell_selected"
+        app:icon="@drawable/ic_scan"
+        app:iconGravity="textStart" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnMenuTheme"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="@string/theme_settings"
+        android:textSize="14sp"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        app:icon="@drawable/ic_theme"
+        app:iconGravity="textStart" />
+
+</LinearLayout>

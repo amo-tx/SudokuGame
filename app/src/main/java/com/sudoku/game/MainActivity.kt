@@ -5,11 +5,8 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
@@ -33,18 +30,28 @@ import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
 import java.io.File
 
+/**
+ * MainActivity - 数独游戏主界面
+ *
+ * 用户操作流程：
+ *   主菜单（新游戏/继续游戏/扫描数独）→ 选择难度（仅新游戏）→ 出题
+ *   → 用户解题 / 程序提示 / 程序自动解题（程序不知道预先的出题答案）
+ *   → 累计错误达到3次或解完问题 → 结束菜单（再来一局/返回主菜单/关闭）
+ */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val viewModel: GameViewModel by viewModels()
 
     private val numberViews = mutableListOf<View>()
-
     private lateinit var prefs: SharedPreferences
 
     // Image recognition
     private var recognizer: SudokuRecognizer? = null
     private var cameraImageUri: Uri? = null
+
+    // Track if a game-over or completion dialog is already showing to prevent duplicates
+    private var endDialogShowing = false
 
     // Activity result launchers
     private val cameraLauncher = registerForActivityResult(
@@ -101,14 +108,72 @@ class MainActivity : AppCompatActivity() {
         setupScanButton()
         observeViewModel()
 
-        // Show start dialog on launch (don't auto-start)
-        showStartDialog()
+        // Show main menu on launch
+        showMainMenu()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        viewModel.saveGame()
+    }
+
+    // ================================================================
+    // 主菜单
+    // ================================================================
+
+    /**
+     * 显示主菜单：新游戏 / 继续游戏 / 扫描数独 / 主题设置
+     */
+    private fun showMainMenu() {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_main_menu, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        // 新游戏 → 选择难度 → 根据难度出题
+        dialogView.findViewById<android.widget.Button>(R.id.btnMenuNewGame).setOnClickListener {
+            dialog.dismiss()
+            showDifficultyDialog { difficulty ->
+                binding.spinnerDifficulty.setSelection(difficulty.ordinal)
+                viewModel.newGame(difficulty)
+            }
+        }
+
+        // 继续游戏 → 从存档恢复
+        dialogView.findViewById<android.widget.Button>(R.id.btnMenuContinue).setOnClickListener {
+            dialog.dismiss()
+            if (viewModel.hasSavedGame()) {
+                if (!viewModel.loadSavedGame()) {
+                    Toast.makeText(this, R.string.no_saved_game, Toast.LENGTH_SHORT).show()
+                    showMainMenu()
+                } else {
+                    binding.spinnerDifficulty.setSelection(viewModel.difficulty.value?.ordinal ?: 1)
+                }
+            } else {
+                Toast.makeText(this, R.string.no_saved_game, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 扫描数独 → 拍照/相册上传 → 识别 → 加载棋盘
+        dialogView.findViewById<android.widget.Button>(R.id.btnMenuScan).setOnClickListener {
+            dialog.dismiss()
+            showScanSourceDialog()
+        }
+
+        // 主题设置 → 切换主题
+        dialogView.findViewById<android.widget.Button>(R.id.btnMenuTheme).setOnClickListener {
+            cycleTheme()
+        }
+
+        dialog.show()
     }
 
     /**
-     * Show the start dialog where user selects difficulty and begins the game
+     * 显示难度选择对话框
+     * @param onSelected 用户选择难度后的回调
      */
-    private fun showStartDialog() {
+    private fun showDifficultyDialog(onSelected: (Difficulty) -> Unit) {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_start_game, null)
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
@@ -117,27 +182,90 @@ class MainActivity : AppCompatActivity() {
 
         dialogView.findViewById<android.widget.Button>(R.id.btnEasy).setOnClickListener {
             dialog.dismiss()
-            binding.spinnerDifficulty.setSelection(Difficulty.EASY.ordinal)
-            viewModel.newGame(Difficulty.EASY)
+            onSelected(Difficulty.EASY)
         }
         dialogView.findViewById<android.widget.Button>(R.id.btnMedium).setOnClickListener {
             dialog.dismiss()
-            binding.spinnerDifficulty.setSelection(Difficulty.MEDIUM.ordinal)
-            viewModel.newGame(Difficulty.MEDIUM)
+            onSelected(Difficulty.MEDIUM)
         }
         dialogView.findViewById<android.widget.Button>(R.id.btnHard).setOnClickListener {
             dialog.dismiss()
-            binding.spinnerDifficulty.setSelection(Difficulty.HARD.ordinal)
-            viewModel.newGame(Difficulty.HARD)
+            onSelected(Difficulty.HARD)
         }
         dialogView.findViewById<android.widget.Button>(R.id.btnExpert).setOnClickListener {
             dialog.dismiss()
-            binding.spinnerDifficulty.setSelection(Difficulty.EXPERT.ordinal)
-            viewModel.newGame(Difficulty.EXPERT)
+            onSelected(Difficulty.EXPERT)
         }
 
         dialog.show()
     }
+
+    // ================================================================
+    // 结束菜单
+    // ================================================================
+
+    /**
+     * 显示游戏结束对话框（累计错误达到3次）
+     */
+    private fun showGameOverDialog() {
+        if (endDialogShowing) return
+        endDialogShowing = true
+
+        val time = formatTime(viewModel.elapsedSeconds.value ?: 0)
+        val difficulty = viewModel.difficulty.value?.label ?: ""
+
+        AlertDialog.Builder(this)
+            .setTitle("游戏结束")
+            .setMessage("难度：$difficulty\n用时：$time\n错误：${GameViewModel.MAX_MISTAKES}/${GameViewModel.MAX_MISTAKES}")
+            .setPositiveButton(R.string.play_again) { _, _ ->
+                endDialogShowing = false
+                val diff = viewModel.difficulty.value ?: Difficulty.MEDIUM
+                viewModel.newGame(diff)
+            }
+            .setNegativeButton(R.string.back_to_menu) { _, _ ->
+                endDialogShowing = false
+                showMainMenu()
+            }
+            .setNeutralButton(R.string.close) { _, _ ->
+                endDialogShowing = false
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    /**
+     * 显示完成对话框（解完问题）
+     */
+    private fun showCompletionDialog() {
+        if (endDialogShowing) return
+        endDialogShowing = true
+
+        val time = formatTime(viewModel.elapsedSeconds.value ?: 0)
+        val mistakes = viewModel.mistakeCount.value ?: 0
+        val difficulty = viewModel.difficulty.value?.label ?: ""
+
+        AlertDialog.Builder(this)
+            .setTitle("恭喜完成！")
+            .setMessage("难度：$difficulty\n用时：$time\n错误：$mistakes/${GameViewModel.MAX_MISTAKES}")
+            .setPositiveButton(R.string.play_again) { _, _ ->
+                endDialogShowing = false
+                val diff = viewModel.difficulty.value ?: Difficulty.MEDIUM
+                viewModel.newGame(diff)
+            }
+            .setNegativeButton(R.string.back_to_menu) { _, _ ->
+                endDialogShowing = false
+                showMainMenu()
+            }
+            .setNeutralButton(R.string.close) { _, _ ->
+                endDialogShowing = false
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    // ================================================================
+    // UI 初始化
+    // ================================================================
 
     /**
      * Set up the number pad (1-9 buttons with remaining count)
@@ -161,7 +289,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Set up difficulty spinner
+     * Set up difficulty spinner - display only, does not auto-restart game
      */
     private fun setupDifficultySpinner() {
         val difficulties = Difficulty.entries.map { it.label }
@@ -169,18 +297,6 @@ class MainActivity : AppCompatActivity() {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.spinnerDifficulty.adapter = adapter
         binding.spinnerDifficulty.setSelection(Difficulty.MEDIUM.ordinal)
-
-        binding.spinnerDifficulty.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val difficulty = Difficulty.entries[position]
-                if (viewModel.difficulty.value != difficulty && viewModel.board.value?.let { board ->
-                        board.any { row -> row.any { it != 0 } }
-                    } == true) {
-                    viewModel.newGame(difficulty)
-                }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
     }
 
     /**
@@ -197,7 +313,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupControlButtons() {
         binding.btnNewGame.setOnClickListener {
-            showStartDialog()
+            showMainMenu()
         }
 
         binding.btnErase.setOnClickListener {
@@ -218,23 +334,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Set up theme toggle button - cycles: light -> dark -> system -> light
+     * Cycle theme: light -> dark -> system -> light
      */
-    private fun setupThemeButton() {
-        binding.btnTheme.setOnClickListener {
-            val currentMode = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-            val newMode = when (currentMode) {
-                AppCompatDelegate.MODE_NIGHT_NO -> AppCompatDelegate.MODE_NIGHT_YES
-                AppCompatDelegate.MODE_NIGHT_YES -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                else -> AppCompatDelegate.MODE_NIGHT_NO
-            }
-            prefs.edit().putInt("theme_mode", newMode).apply()
-            AppCompatDelegate.setDefaultNightMode(newMode)
+    private fun cycleTheme() {
+        val currentMode = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        val newMode = when (currentMode) {
+            AppCompatDelegate.MODE_NIGHT_NO -> AppCompatDelegate.MODE_NIGHT_YES
+            AppCompatDelegate.MODE_NIGHT_YES -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            else -> AppCompatDelegate.MODE_NIGHT_NO
         }
+        prefs.edit().putInt("theme_mode", newMode).apply()
+        AppCompatDelegate.setDefaultNightMode(newMode)
     }
 
     /**
-     * Set up scan button - opens dialog to choose camera or gallery
+     * Set up theme toggle button
+     */
+    private fun setupThemeButton() {
+        binding.btnTheme.setOnClickListener {
+            cycleTheme()
+        }
+    }
+
+    // ================================================================
+    // 扫描识别
+    // ================================================================
+
+    /**
+     * Set up scan button
      */
     private fun setupScanButton() {
         binding.btnScan.setOnClickListener {
@@ -255,7 +382,7 @@ class MainActivity : AppCompatActivity() {
                     1 -> startGallery()
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -298,14 +425,12 @@ class MainActivity : AppCompatActivity() {
     private fun loadBitmapFromUri(uri: Uri): Bitmap? {
         return try {
             val inputStream = contentResolver.openInputStream(uri) ?: return null
-            // First decode bounds to check size
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
             BitmapFactory.decodeStream(inputStream, null, options)
             inputStream.close()
 
-            // Calculate sample size to keep image manageable
             val maxDim = 1200
             var sampleSize = 1
             while (options.outWidth / sampleSize > maxDim || options.outHeight / sampleSize > maxDim) {
@@ -326,7 +451,6 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Recognize Sudoku from bitmap image
-     * Shows progress dialog and runs recognition in background
      */
     private fun recognizeSudoku(bitmap: Bitmap) {
         val progressDialog = AlertDialog.Builder(this)
@@ -366,7 +490,6 @@ class MainActivity : AppCompatActivity() {
      * Show recognition result dialog for user confirmation
      */
     private fun showRecognitionResultDialog(board: Array<IntArray>, message: String) {
-        // Build display string
         val sb = StringBuilder()
         sb.append("$message\n\n")
         sb.append("┌───────┬───────┬───────┐\n")
@@ -391,9 +514,13 @@ class MainActivity : AppCompatActivity() {
                 viewModel.loadBoard(board)
                 Toast.makeText(this, "已加载识别的数独", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
+
+    // ================================================================
+    // ViewModel 观察
+    // ================================================================
 
     /**
      * Observe ViewModel LiveData and update UI
@@ -438,6 +565,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        viewModel.isGameOver.observe(this) { gameOver ->
+            if (gameOver) {
+                showGameOverDialog()
+            }
+        }
+
         viewModel.isNoteMode.observe(this) { isNoteMode ->
             binding.btnNote.setTextColor(
                 if (isNoteMode) ContextCompat.getColor(this, R.color.purple_500)
@@ -446,7 +579,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.mistakeCount.observe(this) { count ->
-            binding.tvMistakes.text = count.toString()
+            binding.tvMistakes.text = "$count/${GameViewModel.MAX_MISTAKES}"
+        }
+
+        viewModel.difficulty.observe(this) { difficulty ->
+            binding.spinnerDifficulty.setSelection(difficulty.ordinal)
         }
 
         viewModel.elapsedSeconds.observe(this) { seconds ->
@@ -464,7 +601,15 @@ class MainActivity : AppCompatActivity() {
             binding.btnSolve.isEnabled = !isSolving
             binding.btnHint.isEnabled = !isSolving
         }
+
+        viewModel.isHinting.observe(this) { isHinting ->
+            binding.btnHint.isEnabled = !isHinting
+        }
     }
+
+    // ================================================================
+    // 辅助方法
+    // ================================================================
 
     /**
      * Update remaining counts in the number pad
@@ -512,24 +657,5 @@ class MainActivity : AppCompatActivity() {
         val min = seconds / 60
         val sec = seconds % 60
         return String.format("%02d:%02d", min, sec)
-    }
-
-    /**
-     * Show completion dialog
-     */
-    private fun showCompletionDialog() {
-        val time = formatTime(viewModel.elapsedSeconds.value ?: 0)
-        val mistakes = viewModel.mistakeCount.value ?: 0
-        val difficulty = viewModel.difficulty.value?.label ?: ""
-
-        AlertDialog.Builder(this)
-            .setTitle("🎉 恭喜完成！")
-            .setMessage("难度：$difficulty\n用时：$time\n错误：$mistakes")
-            .setPositiveButton("新游戏") { _, _ ->
-                showStartDialog()
-            }
-            .setNegativeButton("关闭", null)
-            .setCancelable(false)
-            .show()
     }
 }

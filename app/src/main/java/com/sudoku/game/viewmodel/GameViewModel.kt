@@ -1,10 +1,12 @@
 package com.sudoku.game.viewmodel
 
+import android.app.Application
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudoku.game.engine.SudokuGenerator
 import com.sudoku.game.engine.SudokuSolver
@@ -12,47 +14,29 @@ import com.sudoku.game.model.Difficulty
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
- * Game state data
- */
-data class GameState(
-    val board: Array<IntArray>,
-    val given: Array<BooleanArray>,
-    val notes: Array<MutableSet<Int>>,
-    val selectedCell: Pair<Int, Int>?,
-    val selectedNumber: Int,
-    val errorCells: Set<Pair<Int, Int>>,
-    val hintCell: Pair<Int, Int>?,
-    val remainingCounts: IntArray,
-    val isCompleted: Boolean,
-    val isNoteMode: Boolean,
-    val mistakeCount: Int,
-    val difficulty: Difficulty
-)
-
-/**
- * Game ViewModel
+ * GameViewModel - 数独游戏核心状态管理
  *
- * Manages the complete state and logic of the Sudoku game:
- *   - New game generation (difficulty-based + solvability verification)
- *   - Cell selection and number input
- *   - Same number highlighting
- *   - Remaining count in number pad
- *   - Note mode (candidate marking)
- *   - Hint function (based on solver)
- *   - Auto-solving (backtracking + MRV heuristic)
- *   - Error detection
- *   - Timer
+ * 设计原则：
+ *   - 不预存答案（solution），提示和自动解题均通过实时求解器计算
+ *   - 错误检测基于数独规则（行/列/宫冲突），而非对比预存答案
+ *   - 每次填入产生冲突的数字计1次错误（不论冲突多少格），累计3次游戏结束
+ *   - 支持存档/读档（SharedPreferences + JSON）
  */
-class GameViewModel : ViewModel() {
+class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private val solver = SudokuSolver
     private val generator = SudokuGenerator()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Full solution (for hints and verification)
-    private var solution: Array<IntArray>? = null
+    companion object {
+        const val MAX_MISTAKES = 3
+        private const val PREFS_NAME = "sudoku_save"
+        private const val KEY_SAVED_GAME = "saved_game"
+    }
 
     // ---- LiveData ----
     private val _board = MutableLiveData(Array(9) { IntArray(9) })
@@ -82,6 +66,9 @@ class GameViewModel : ViewModel() {
     private val _isCompleted = MutableLiveData(false)
     val isCompleted: LiveData<Boolean> = _isCompleted
 
+    private val _isGameOver = MutableLiveData(false)
+    val isGameOver: LiveData<Boolean> = _isGameOver
+
     private val _isNoteMode = MutableLiveData(false)
     val isNoteMode: LiveData<Boolean> = _isNoteMode
 
@@ -97,67 +84,155 @@ class GameViewModel : ViewModel() {
     private val _isSolving = MutableLiveData(false)
     val isSolving: LiveData<Boolean> = _isSolving
 
+    private val _isHinting = MutableLiveData(false)
+    val isHinting: LiveData<Boolean> = _isHinting
+
     // Timer
     private val _elapsedSeconds = MutableLiveData(0)
     val elapsedSeconds: LiveData<Int> = _elapsedSeconds
 
     private var timerRunnable: Runnable? = null
     private var timerStarted = false
+    private var gameActive = false
 
-    // ---- Game logic ----
+    // ================================================================
+    // 新游戏 / 读档 / 加载识别棋盘
+    // ================================================================
 
     /**
-     * Start a new game
-     * Generates a verified Sudoku puzzle on a background thread
+     * 开始新游戏 - 根据难度生成谜题，不预存答案
      */
     fun newGame(difficulty: Difficulty) {
         _isGenerating.value = true
+        _isGameOver.value = false
         _difficulty.value = difficulty
         stopTimer()
 
         viewModelScope.launch(Dispatchers.IO) {
             val puzzle = generator.generateVerified(difficulty)
-            val result = solver.solve(puzzle)
-            val sol = if (result.success) result.board else null
 
             withContext(Dispatchers.Main) {
-                solution = sol
-
-                _board.value = puzzle
-                _given.value = Array(9) { r -> BooleanArray(9) { c -> puzzle[r][c] != 0 } }
-                _notes.value = Array(81) { mutableSetOf<Int>() }
-                _selectedCell.value = null
-                _selectedNumber.value = 0
-                _errorCells.value = emptySet()
-                _hintCell.value = null
-                _isCompleted.value = false
-                _isNoteMode.value = false
-                _mistakeCount.value = 0
-                _elapsedSeconds.value = 0
+                resetBoardState(puzzle)
                 _isGenerating.value = false
-
-                updateRemainingCounts(puzzle)
+                gameActive = true
                 startTimer()
             }
         }
     }
 
     /**
-     * Select a cell
+     * 从识别结果加载数独棋盘，不预存答案
      */
-    fun selectCell(row: Int, col: Int) {
-        _selectedCell.value = Pair(row, col)
-        val value = _board.value?.get(row)?.get(col) ?: 0
-        _selectedNumber.value = value
-        // Clear previous hint highlight
-        _hintCell.value = null
+    fun loadBoard(puzzle: Array<IntArray>) {
+        _isGenerating.value = true
+        _isGameOver.value = false
+        stopTimer()
+
+        viewModelScope.launch(Dispatchers.Main) {
+            resetBoardState(puzzle)
+            _isGenerating.value = false
+            gameActive = true
+            startTimer()
+        }
     }
 
     /**
-     * Input a number into the selected cell
+     * 从存档恢复游戏
      */
+    fun loadSavedGame(): Boolean {
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_SAVED_GAME, null) ?: return false
+
+        return try {
+            val obj = JSONObject(json)
+            val board = jsonToBoard(obj.getJSONArray("board"))
+            val given = jsonToGiven(obj.getJSONArray("given"))
+            val mistakes = obj.getInt("mistakes")
+            val elapsed = obj.getInt("elapsed")
+            val diff = Difficulty.fromLabel(obj.getString("difficulty"))
+
+            _difficulty.value = diff
+            _isGameOver.value = false
+            stopTimer()
+
+            _board.value = board
+            _given.value = given
+            _notes.value = Array(81) { mutableSetOf<Int>() }
+            _selectedCell.value = null
+            _selectedNumber.value = 0
+            _errorCells.value = detectConflicts(board)
+            _hintCell.value = null
+            _isCompleted.value = false
+            _isNoteMode.value = false
+            _mistakeCount.value = mistakes
+            _elapsedSeconds.value = elapsed
+            _isGenerating.value = false
+
+            updateRemainingCounts(board)
+            gameActive = true
+            startTimer()
+
+            prefs.edit().remove(KEY_SAVED_GAME).apply()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 保存当前游戏状态
+     */
+    fun saveGame() {
+        if (!gameActive || _isCompleted.value == true || _isGameOver.value == true) return
+
+        val b = _board.value ?: return
+        val g = _given.value ?: return
+
+        val obj = JSONObject()
+        obj.put("board", boardToJson(b))
+        obj.put("given", givenToJson(g))
+        obj.put("mistakes", _mistakeCount.value ?: 0)
+        obj.put("elapsed", _elapsedSeconds.value ?: 0)
+        obj.put("difficulty", _difficulty.value?.label ?: Difficulty.MEDIUM.label)
+
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_SAVED_GAME, obj.toString()).apply()
+    }
+
+    fun hasSavedGame(): Boolean {
+        val prefs = getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.contains(KEY_SAVED_GAME)
+    }
+
+    private fun resetBoardState(puzzle: Array<IntArray>) {
+        _board.value = puzzle
+        _given.value = Array(9) { r -> BooleanArray(9) { c -> puzzle[r][c] != 0 } }
+        _notes.value = Array(81) { mutableSetOf<Int>() }
+        _selectedCell.value = null
+        _selectedNumber.value = 0
+        _errorCells.value = emptySet()
+        _hintCell.value = null
+        _isCompleted.value = false
+        _isNoteMode.value = false
+        _mistakeCount.value = 0
+        _elapsedSeconds.value = 0
+        updateRemainingCounts(puzzle)
+    }
+
+    // ================================================================
+    // 用户操作
+    // ================================================================
+
+    fun selectCell(row: Int, col: Int) {
+        if (_isCompleted.value == true || _isGameOver.value == true) return
+        _selectedCell.value = Pair(row, col)
+        val value = _board.value?.get(row)?.get(col) ?: 0
+        _selectedNumber.value = value
+        _hintCell.value = null
+    }
+
     fun inputNumber(num: Int) {
-        if (_isCompleted.value == true) return
+        if (_isCompleted.value == true || _isGameOver.value == true) return
 
         val cell = _selectedCell.value ?: return
         val (r, c) = cell
@@ -175,20 +250,18 @@ class GameViewModel : ViewModel() {
 
             _notes.value?.get(r * 9 + c)?.clear()
             _notes.value = _notes.value
-
             _selectedNumber.value = b[r][c]
 
-            checkErrors()
+            // 只检查用户刚填入的格子是否产生冲突
+            checkMistakes(b, r, c)
+            _errorCells.value = detectConflicts(b)
             updateRemainingCounts(b)
-            checkCompletion()
+            checkCompletion(b)
         }
     }
 
-    /**
-     * Erase the selected cell's value
-     */
     fun erase() {
-        if (_isCompleted.value == true) return
+        if (_isCompleted.value == true || _isGameOver.value == true) return
 
         val cell = _selectedCell.value ?: return
         val (r, c) = cell
@@ -201,72 +274,82 @@ class GameViewModel : ViewModel() {
 
         _notes.value?.get(r * 9 + c)?.clear()
         _notes.value = _notes.value
-
         _selectedNumber.value = 0
 
-        checkErrors()
+        _errorCells.value = detectConflicts(b)
         updateRemainingCounts(b)
     }
 
-    /**
-     * Toggle note mode
-     */
     fun toggleNoteMode() {
         _isNoteMode.value = !(_isNoteMode.value ?: false)
     }
 
+    // ================================================================
+    // 提示功能 - 实时求解，不使用预存答案
+    // ================================================================
+
     /**
-     * Hint function - fills in a correct answer using the solver.
-     *
-     * Strategy:
-     *   - If a non-given cell is selected and it's wrong/empty, fill it with the correct answer
-     *   - If the selected cell is given or already correct, find the next empty/wrong cell
-     *   - If no cell is selected, find the first empty/wrong cell
-     *   - Prioritizes the selected cell, then scans row-by-row
+     * 提示：实时求解当前棋盘，填充一个正确答案
+     * 若当前棋盘因用户错误无解，则从原始题目（given格）重新求解
      */
     fun hint() {
-        if (_isCompleted.value == true) return
-        val sol = solution ?: return
+        if (_isCompleted.value == true || _isGameOver.value == true) return
+        if (_isHinting.value == true || _isSolving.value == true) return
+
         val b = _board.value ?: return
         val givens = _given.value ?: return
 
-        val cell = _selectedCell.value
-        if (cell != null) {
-            val (r, c) = cell
-            if (!givens[r][c] && b[r][c] != sol[r][c]) {
-                // Selected cell is empty or wrong -> fill with correct answer
-                applyHint(r, c, sol[r][c], b)
-                return
+        _isHinting.value = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            // 尝试求解当前棋盘
+            var result = solver.solve(b)
+
+            // 若当前棋盘无解（用户填入了错误数字），从原始题目求解
+            if (!result.success) {
+                val originalBoard = Array(9) { IntArray(9) }
+                for (r in 0..8) {
+                    for (c in 0..8) {
+                        originalBoard[r][c] = if (givens[r][c]) b[r][c] else 0
+                    }
+                }
+                result = solver.solve(originalBoard)
+            }
+
+            withContext(Dispatchers.Main) {
+                _isHinting.value = false
+
+                if (!result.success) return@withContext
+
+                val sol = result.board
+                val cell = _selectedCell.value
+                var filled = false
+
+                if (cell != null) {
+                    val (r, c) = cell
+                    if (!givens[r][c] && b[r][c] != sol[r][c]) {
+                        applyHint(r, c, sol[r][c], b)
+                        filled = true
+                    }
+                }
+
+                if (!filled) {
+                    val startR = _selectedCell.value?.first ?: 0
+                    val startC = _selectedCell.value?.second ?: 0
+                    for (offset in 0..80) {
+                        val idx = (startR * 9 + startC + offset) % 81
+                        val r = idx / 9
+                        val c = idx % 9
+                        if (!givens[r][c] && b[r][c] != sol[r][c]) {
+                            applyHint(r, c, sol[r][c], b)
+                            return@withContext
+                        }
+                    }
+                }
             }
         }
-        // Selected cell is given, correct, or none selected -> find next empty/wrong cell
-        findAndHintEmpty(b, sol)
     }
 
-    /**
-     * Find the next empty or incorrect cell and fill it with the correct answer.
-     * Searches from the selected cell's position first, then wraps around.
-     */
-    private fun findAndHintEmpty(b: Array<IntArray>, sol: Array<IntArray>) {
-        val givens = _given.value ?: return
-        val startR = _selectedCell.value?.first ?: 0
-        val startC = _selectedCell.value?.second ?: 0
-
-        // Search from the selected position forward, then wrap around
-        for (offset in 0..80) {
-            val idx = (startR * 9 + startC + offset) % 81
-            val r = idx / 9
-            val c = idx % 9
-            if (!givens[r][c] && b[r][c] != sol[r][c]) {
-                applyHint(r, c, sol[r][c], b)
-                return
-            }
-        }
-    }
-
-    /**
-     * Apply a hint: fill the cell with the correct value and update all state
-     */
     private fun applyHint(r: Int, c: Int, value: Int, b: Array<IntArray>) {
         b[r][c] = value
         _board.value = b
@@ -276,107 +359,178 @@ class GameViewModel : ViewModel() {
         _selectedNumber.value = value
         _hintCell.value = Pair(r, c)
         updateRemainingCounts(b)
-        checkErrors()
-        checkCompletion()
+        _errorCells.value = detectConflicts(b)
+        checkCompletion(b)
     }
 
+    // ================================================================
+    // 自动解题 - 实时求解，不使用预存答案
+    // ================================================================
+
     /**
-     * Auto-solve using backtracking + MRV, filling cells one by one with animation
+     * 自动解题：实时求解当前棋盘，逐格动画填充
+     * 若当前棋盘因用户错误无解，则从原始题目（given格）重新求解
      */
     fun solveAll() {
-        if (_isCompleted.value == true) return
-        val sol = solution
-        val b = _board.value ?: return
+        if (_isCompleted.value == true || _isGameOver.value == true) return
+        if (_isSolving.value == true) return
 
-        if (sol != null) {
-            _isSolving.value = true
-            val cellsToFill = mutableListOf<Triple<Int, Int, Int>>()
-            for (r in 0..8) {
-                for (c in 0..8) {
-                    if (b[r][c] != sol[r][c]) {
-                        cellsToFill.add(Triple(r, c, sol[r][c]))
-                    }
-                }
-            }
-
-            if (cellsToFill.isEmpty()) {
-                _isSolving.value = false
-                return
-            }
-
-            var index = 0
-            val fillNext = object : Runnable {
-                override fun run() {
-                    if (index >= cellsToFill.size) {
-                        _isSolving.value = false
-                        _isCompleted.value = true
-                        _given.value = Array(9) { r -> BooleanArray(9) { c -> true } }
-                        stopTimer()
-                        return
-                    }
-                    val (r, c, v) = cellsToFill[index]
-                    b[r][c] = v
-                    _board.value = b
-                    _selectedCell.value = Pair(r, c)
-                    _selectedNumber.value = v
-                    _hintCell.value = Pair(r, c)
-                    updateRemainingCounts(b)
-                    index++
-                    mainHandler.postDelayed(this, 50)
-                }
-            }
-            fillNext.run()
-        } else {
-            _isSolving.value = true
-            viewModelScope.launch(Dispatchers.IO) {
-                val result = solver.solve(b)
-                withContext(Dispatchers.Main) {
-                    if (result.success) {
-                        solution = result.board
-                        _board.value = result.board
-                        _given.value = Array(9) { r -> BooleanArray(9) { c -> true } }
-                        _isCompleted.value = true
-                        _selectedCell.value = null
-                        _selectedNumber.value = 0
-                        _hintCell.value = null
-                        updateRemainingCounts(result.board)
-                        stopTimer()
-                    }
-                    _isSolving.value = false
-                }
-            }
-        }
-    }
-
-    /**
-     * Check the board for errors (user input that doesn't match the solution)
-     */
-    private fun checkErrors() {
-        val sol = solution ?: return
         val b = _board.value ?: return
         val givens = _given.value ?: return
+        _isSolving.value = true
 
-        val errors = mutableSetOf<Pair<Int, Int>>()
+        viewModelScope.launch(Dispatchers.IO) {
+            // 尝试求解当前棋盘
+            var result = solver.solve(b)
+
+            // 若当前棋盘无解，从原始题目求解
+            if (!result.success) {
+                val originalBoard = Array(9) { IntArray(9) }
+                for (r in 0..8) {
+                    for (c in 0..8) {
+                        originalBoard[r][c] = if (givens[r][c]) b[r][c] else 0
+                    }
+                }
+                result = solver.solve(originalBoard)
+            }
+
+            val sol = if (result.success) result.board else null
+
+            withContext(Dispatchers.Main) {
+                if (sol == null) {
+                    _isSolving.value = false
+                    return@withContext
+                }
+
+                val cellsToFill = mutableListOf<Triple<Int, Int, Int>>()
+                for (r in 0..8) {
+                    for (c in 0..8) {
+                        if (b[r][c] != sol[r][c]) {
+                            cellsToFill.add(Triple(r, c, sol[r][c]))
+                        }
+                    }
+                }
+
+                if (cellsToFill.isEmpty()) {
+                    _isSolving.value = false
+                    _isCompleted.value = true
+                    stopTimer()
+                    return@withContext
+                }
+
+                var index = 0
+                val fillNext = object : Runnable {
+                    override fun run() {
+                        if (index >= cellsToFill.size) {
+                            _isSolving.value = false
+                            _isCompleted.value = true
+                            _given.value = Array(9) { r -> BooleanArray(9) { c -> true } }
+                            stopTimer()
+                            return
+                        }
+                        val (r, c, v) = cellsToFill[index]
+                        b[r][c] = v
+                        _board.value = b
+                        _selectedCell.value = Pair(r, c)
+                        _selectedNumber.value = v
+                        _hintCell.value = Pair(r, c)
+                        updateRemainingCounts(b)
+                        index++
+                        mainHandler.postDelayed(this, 50)
+                    }
+                }
+                fillNext.run()
+            }
+        }
+    }
+
+    // ================================================================
+    // 错误检测 - 基于数独规则（行/列/宫冲突）
+    // ================================================================
+
+    /**
+     * 检测棋盘上的所有冲突单元格
+     */
+    private fun detectConflicts(b: Array<IntArray>): Set<Pair<Int, Int>> {
+        val conflicts = mutableSetOf<Pair<Int, Int>>()
+
         for (r in 0..8) {
             for (c in 0..8) {
-                if (!givens[r][c] && b[r][c] != 0 && b[r][c] != sol[r][c]) {
-                    errors.add(Pair(r, c))
+                val v = b[r][c]
+                if (v == 0) continue
+
+                for (cc in 0..8) {
+                    if (cc != c && b[r][cc] == v) {
+                        conflicts.add(Pair(r, c))
+                        conflicts.add(Pair(r, cc))
+                    }
+                }
+                for (rr in 0..8) {
+                    if (rr != r && b[rr][c] == v) {
+                        conflicts.add(Pair(r, c))
+                        conflicts.add(Pair(rr, c))
+                    }
+                }
+                val br = (r / 3) * 3
+                val bc = (c / 3) * 3
+                for (rr in br until br + 3) {
+                    for (cc in bc until bc + 3) {
+                        if ((rr != r || cc != c) && b[rr][cc] == v) {
+                            conflicts.add(Pair(r, c))
+                            conflicts.add(Pair(rr, cc))
+                        }
+                    }
                 }
             }
         }
-
-        val prevErrors = _errorCells.value ?: emptySet()
-        val newErrors = errors - prevErrors
-        if (newErrors.isNotEmpty()) {
-            _mistakeCount.value = (_mistakeCount.value ?: 0) + newErrors.size
-        }
-
-        _errorCells.value = errors
+        return conflicts
     }
 
     /**
-     * Update remaining count for each number (1-9)
+     * 检查用户刚填入的格子是否产生新的冲突
+     * 每次填入产生冲突计1次错误（不论与多少格冲突）
      */
+    private fun checkMistakes(b: Array<IntArray>, placedRow: Int, placedCol: Int) {
+        val givens = _given.value ?: return
+        if (givens[placedRow][placedCol]) return
+
+        val prevErrors = _errorCells.value ?: emptySet()
+        val currentErrors = detectConflicts(b)
+
+        val cellKey = Pair(placedRow, placedCol)
+        val cellWasError = prevErrors.contains(cellKey)
+        val cellIsError = currentErrors.contains(cellKey)
+
+        // 仅当该格子新产生冲突（之前不冲突，现在冲突）时计1次错误
+        if (cellIsError && !cellWasError) {
+            val newCount = (_mistakeCount.value ?: 0) + 1
+            _mistakeCount.value = newCount
+
+            if (newCount >= MAX_MISTAKES) {
+                _isGameOver.value = true
+                stopTimer()
+            }
+        }
+    }
+
+    /**
+     * 检查是否完成（所有格子已填且无冲突）
+     */
+    private fun checkCompletion(b: Array<IntArray>) {
+        for (r in 0..8) {
+            for (c in 0..8) {
+                if (b[r][c] == 0) return
+            }
+        }
+        if (detectConflicts(b).isNotEmpty()) return
+
+        _isCompleted.value = true
+        _selectedCell.value = null
+        _selectedNumber.value = 0
+        _hintCell.value = null
+        stopTimer()
+    }
+
     private fun updateRemainingCounts(b: Array<IntArray>) {
         val counts = IntArray(10)
         for (r in 0..8) {
@@ -388,34 +542,6 @@ class GameViewModel : ViewModel() {
         _remainingCounts.value = remaining
     }
 
-    /**
-     * Check if the puzzle is complete
-     */
-    private fun checkCompletion() {
-        val b = _board.value ?: return
-        for (r in 0..8) {
-            for (c in 0..8) {
-                if (b[r][c] == 0) return
-            }
-        }
-        val sol = solution
-        if (sol != null) {
-            for (r in 0..8) {
-                for (c in 0..8) {
-                    if (b[r][c] != sol[r][c]) return
-                }
-            }
-        }
-        _isCompleted.value = true
-        _selectedCell.value = null
-        _selectedNumber.value = 0
-        _hintCell.value = null
-        stopTimer()
-    }
-
-    /**
-     * Toggle a note mark
-     */
     private fun toggleNote(r: Int, c: Int, num: Int) {
         val currentNotes = _notes.value ?: return
         val cellNotes = currentNotes[r * 9 + c]
@@ -427,43 +553,51 @@ class GameViewModel : ViewModel() {
         _notes.value = currentNotes
     }
 
+    // ================================================================
+    // 存档序列化/反序列化
+    // ================================================================
 
-    /**
-     * 从识别结果加载数独棋盘
-     * 非零单元格标记为给定数字，并计算完整解
-     */
-    fun loadBoard(puzzle: Array<IntArray>) {
-        _isGenerating.value = true
-        stopTimer()
-
-        viewModelScope.launch(Dispatchers.IO) {
-            // 尝试求解识别到的棋盘
-            val result = solver.solve(puzzle)
-            val sol = if (result.success) result.board else null
-
-            withContext(Dispatchers.Main) {
-                solution = sol
-
-                _board.value = puzzle
-                _given.value = Array(9) { r -> BooleanArray(9) { c -> puzzle[r][c] != 0 } }
-                _notes.value = Array(81) { mutableSetOf<Int>() }
-                _selectedCell.value = null
-                _selectedNumber.value = 0
-                _errorCells.value = emptySet()
-                _hintCell.value = null
-                _isCompleted.value = false
-                _isNoteMode.value = false
-                _mistakeCount.value = 0
-                _elapsedSeconds.value = 0
-                _isGenerating.value = false
-
-                updateRemainingCounts(puzzle)
-                startTimer()
-            }
+    private fun boardToJson(b: Array<IntArray>): JSONArray {
+        val arr = JSONArray()
+        for (r in 0..8) {
+            val row = JSONArray()
+            for (c in 0..8) row.put(b[r][c])
+            arr.put(row)
         }
+        return arr
     }
 
-    // ---- Timer ----
+    private fun givenToJson(g: Array<BooleanArray>): JSONArray {
+        val arr = JSONArray()
+        for (r in 0..8) {
+            val row = JSONArray()
+            for (c in 0..8) row.put(g[r][c])
+            arr.put(row)
+        }
+        return arr
+    }
+
+    private fun jsonToBoard(arr: JSONArray): Array<IntArray> {
+        val b = Array(9) { IntArray(9) }
+        for (r in 0..8) {
+            val row = arr.getJSONArray(r)
+            for (c in 0..8) b[r][c] = row.getInt(c)
+        }
+        return b
+    }
+
+    private fun jsonToGiven(arr: JSONArray): Array<BooleanArray> {
+        val g = Array(9) { BooleanArray(9) }
+        for (r in 0..8) {
+            val row = arr.getJSONArray(r)
+            for (c in 0..8) g[r][c] = row.getBoolean(c)
+        }
+        return g
+    }
+
+    // ================================================================
+    // Timer
+    // ================================================================
 
     private fun startTimer() {
         if (timerStarted) return
