@@ -261,7 +261,7 @@ class MainActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this)
             .setTitle("🎉 恭喜完成！")
-            .setMessage("难度：$difficulty\n用时：$time\n错误：$mistake")
+            .setMessage("难度：$difficulty\n用时：$time\n错误：$mistakes")
             .setPositiveButton("新游戏") { _, _ ->
                 val diff = viewModel.difficulty.value ?: Difficulty.MEDIUM
                 viewModel.newGame(diff)
