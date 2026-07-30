@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Board-specific theme attributes -->
+    <attr name="boardCellDefault" format="color" />
+    <attr name="boardCellHighlight" format="color" />
+    <attr name="boardCellSameNumber" format="color" />
+    <attr name="boardCellSelected" format="color" />
+    <attr name="boardCellError" format="color" />
+    <attr name="boardCellHint" format="color" />
+    <attr name="boardLineThin" format="color" />
+    <attr name="boardLineThick" format="color" />
+    <attr name="boardTextGiven" format="color" />
+    <attr name="boardTextUser" format="color" />
+    <attr name="boardTextError" format="color" />
+    <attr name="boardTextNote" format="color" />
+    <attr name="boardBackground" format="color" />
+    <attr name="toolbarBackground" format="color" />
+    <attr name="toolbarTextColor" format="color" />
+    <attr name="numberBtnBackground" format="color" />
+</resources>

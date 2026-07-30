@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="board_bg">#121212</color>
+    <color name="cell_default">#1E1E1E</color>
+    <color name="cell_highlight">#1A237E</color>
+    <color name="cell_same_number">#283593</color>
+    <color name="cell_selected">#3949AB</color>
+    <color name="cell_error">#B71C1C</color>
+    <color name="cell_hint">#4E342E</color>
+
+    <color name="grid_line_thin">#3A3A3A</color>
+    <color name="grid_line_thick">#757575</color>
+
+    <color name="text_given">#E0E0E0</color>
+    <color name="text_user">#64B5F6</color>
+    <color name="text_error">#EF5350</color>
+    <color name="text_note">#9E9E9E</color>
+
+    <color name="number_btn_bg">#2D2D2D</color>
+    <color name="number_btn_selected">#1A237E</color>
+    <color name="number_btn_disabled">#1A1A1A</color>
+
+    <color name="toolbar_bg">#1E1E1E</color>
+    <color name="toolbar_text">#E0E0E0</color>
+</resources>

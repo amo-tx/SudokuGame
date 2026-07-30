@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -6,7 +6,7 @@
     android:orientation="vertical"
     android:background="@color/board_bg">
 
-    <!-- 顶部工具栏 -->
+    <!-- Top toolbar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -29,7 +29,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@android:color/transparent"
-            android:popupBackground="@color/white" />
+            android:popupBackground="@color/board_bg" />
 
         <ImageButton
             android:id="@+id/btnNewGame"
@@ -39,9 +39,18 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/new_game"
             app:tint="@color/toolbar_text" />
+
+        <ImageButton
+            android:id="@+id/btnTheme"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_day_of_week"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/theme_light"
+            app:tint="@color/toolbar_text" />
     </LinearLayout>
 
-    <!-- 信息栏：计时器和错误数 -->
+    <!-- Info bar: timer and mistakes -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -99,7 +108,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 数独棋盘 -->
+    <!-- Sudoku board -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -120,7 +129,7 @@
             android:visibility="gone" />
     </FrameLayout>
 
-    <!-- 数字候选栏 1-9（代码动态生成按钮） -->
+    <!-- Number pad 1-9 (buttons generated in code) -->
     <LinearLayout
         android:id="@+id/numberPad"
         android:layout_width="match_parent"
@@ -128,7 +137,7 @@
         android:orientation="horizontal"
         android:padding="4dp" />
 
-    <!-- 控制按钮栏 -->
+    <!-- Control buttons -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

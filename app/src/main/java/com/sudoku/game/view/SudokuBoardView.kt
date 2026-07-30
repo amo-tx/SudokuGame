@@ -1,4 +1,4 @@
-package com.sudoku.game.view
+﻿package com.sudoku.game.view
 
 import android.content.Context
 import android.graphics.Canvas
@@ -8,20 +8,23 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.content.ContextCompat
+import com.sudoku.game.R
 
 /**
- * 数独棋盘自定义视图
+ * Sudoku board custom view with theme support.
  *
- * 功能：
- *   - 绘制 9x9 网格，3x3 宫格用粗线分隔
- *   - 绘制数字：题目数字（黑色粗体）、用户输入（蓝色）、错误（红色）
- *   - 选中单元格高亮（蓝色）
- *   - 同行/同列/同宫高亮（浅蓝）
- *   - 相同数字高亮（中蓝）
- *   - 错误单元格红色背景
- *   - 提示单元格黄色背景
- *   - 笔记标记（3x3小数字网格）
- *   - 触摸选择单元格
+ * Features:
+ *   - 9x9 grid with 3x3 box separators
+ *   - Given numbers (bold), user input (blue), errors (red)
+ *   - Selected cell highlight
+ *   - Same row/col/box highlight
+ *   - Same number highlight
+ *   - Error cell red background
+ *   - Hint cell yellow background
+ *   - Notes (3x3 mini grid)
+ *   - Touch selection
+ *   - DayNight theme-aware colors
  */
 class SudokuBoardView @JvmOverloads constructor(
     context: Context,
@@ -29,7 +32,7 @@ class SudokuBoardView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    // ---- 棋盘数据 ----
+    // ---- Board data ----
     var board: Array<IntArray> = Array(9) { IntArray(9) }
         set(value) {
             field = value
@@ -42,74 +45,81 @@ class SudokuBoardView @JvmOverloads constructor(
             invalidate()
         }
 
-    /** 笔记标记，notes[r*9+c] 存储该格的候选数字集合 */
     var notes: Array<MutableSet<Int>> = Array(81) { mutableSetOf() }
         set(value) {
             field = value
             invalidate()
         }
 
-    /** 当前选中的单元格 */
     var selectedCell: Pair<Int, Int>? = null
         set(value) {
             field = value
             invalidate()
         }
 
-    /** 高亮的数字（选中单元格的值，用于高亮相同数字） */
     var highlightNumber: Int = 0
         set(value) {
             field = value
             invalidate()
         }
 
-    /** 错误单元格集合 */
     var errorCells: Set<Pair<Int, Int>> = emptySet()
         set(value) {
             field = value
             invalidate()
         }
 
-    /** 提示单元格 */
     var hintCell: Pair<Int, Int>? = null
         set(value) {
             field = value
             invalidate()
         }
 
-    /** 单元格点击回调 */
     var onCellSelected: ((row: Int, col: Int) -> Unit)? = null
 
-    // ---- 画笔 ----
+    // ---- Paints ----
     private val cellBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val notePaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    // 颜色定义
-    private val colorCellDefault = Color.parseColor("#FFFFFF")
-    private val colorCellHighlight = Color.parseColor("#E3F2FD")
-    private val colorCellSameNumber = Color.parseColor("#BBDEFB")
-    private val colorCellSelected = Color.parseColor("#90CAF9")
-    private val colorCellError = Color.parseColor("#FFCDD2")
-    private val colorCellHint = Color.parseColor("#FFF9C4")
-    private val colorLineThin = Color.parseColor("#E0E0E0")
-    private val colorLineThick = Color.parseColor("#424242")
-    private val colorTextGiven = Color.parseColor("#1A1A1A")
-    private val colorTextUser = Color.parseColor("#1565C0")
-    private val colorTextError = Color.parseColor("#C62828")
-    private val colorTextNote = Color.parseColor("#9E9E9E")
+    // Theme-aware colors (reloaded on configuration change)
+    private val colorCellDefault: Int
+    private val colorCellHighlight: Int
+    private val colorCellSameNumber: Int
+    private val colorCellSelected: Int
+    private val colorCellError: Int
+    private val colorCellHint: Int
+    private val colorLineThin: Int
+    private val colorLineThick: Int
+    private val colorTextGiven: Int
+    private val colorTextUser: Int
+    private val colorTextError: Int
+    private val colorTextNote: Int
 
     init {
         linePaint.style = Paint.Style.STROKE
         textPaint.textAlign = Paint.Align.CENTER
         notePaint.textAlign = Paint.Align.CENTER
+
+        // Load colors from resources (automatically switches with DayNight theme)
+        colorCellDefault = ContextCompat.getColor(context, R.color.cell_default)
+        colorCellHighlight = ContextCompat.getColor(context, R.color.cell_highlight)
+        colorCellSameNumber = ContextCompat.getColor(context, R.color.cell_same_number)
+        colorCellSelected = ContextCompat.getColor(context, R.color.cell_selected)
+        colorCellError = ContextCompat.getColor(context, R.color.cell_error)
+        colorCellHint = ContextCompat.getColor(context, R.color.cell_hint)
+        colorLineThin = ContextCompat.getColor(context, R.color.grid_line_thin)
+        colorLineThick = ContextCompat.getColor(context, R.color.grid_line_thick)
+        colorTextGiven = ContextCompat.getColor(context, R.color.text_given)
+        colorTextUser = ContextCompat.getColor(context, R.color.text_user)
+        colorTextError = ContextCompat.getColor(context, R.color.text_error)
+        colorTextNote = ContextCompat.getColor(context, R.color.text_note)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         val size = minOf(measuredWidth, measuredHeight)
-        // 确保最小尺寸
         val minSize = 200
         val finalSize = maxOf(size, minSize)
         setMeasuredDimension(finalSize, finalSize)
@@ -119,7 +129,7 @@ class SudokuBoardView @JvmOverloads constructor(
         super.onDraw(canvas)
         val cellSize = width.toFloat() / 9f
 
-        // ---- 1. 绘制单元格背景 ----
+        // ---- 1. Draw cell backgrounds ----
         for (r in 0..8) {
             for (c in 0..8) {
                 val left = c * cellSize
@@ -148,7 +158,7 @@ class SudokuBoardView @JvmOverloads constructor(
             }
         }
 
-        // ---- 2. 绘制网格线 ----
+        // ---- 2. Draw grid lines ----
         for (i in 0..9) {
             val pos = i * cellSize
             if (i % 3 == 0) {
@@ -162,7 +172,7 @@ class SudokuBoardView @JvmOverloads constructor(
             canvas.drawLine(0f, pos, width.toFloat(), pos, linePaint)
         }
 
-        // ---- 3. 绘制数字和笔记 ----
+        // ---- 3. Draw numbers and notes ----
         for (r in 0..8) {
             for (c in 0..8) {
                 val value = board[r][c]
@@ -170,7 +180,6 @@ class SudokuBoardView @JvmOverloads constructor(
                 val cy = r * cellSize + cellSize / 2f
 
                 if (value != 0) {
-                    // 绘制数字
                     textPaint.textSize = cellSize * 0.5f
                     textPaint.color = when {
                         Pair(r, c) in errorCells -> colorTextError
@@ -182,7 +191,6 @@ class SudokuBoardView @JvmOverloads constructor(
                     val baseline = cy - (fm.descent + fm.ascent) / 2f
                     canvas.drawText(value.toString(), cx, baseline, textPaint)
                 } else if (notes[r * 9 + c].isNotEmpty()) {
-                    // 绘制笔记（3x3 小数字网格）
                     notePaint.textSize = cellSize * 0.2f
                     notePaint.color = colorTextNote
                     for (n in notes[r * 9 + c]) {

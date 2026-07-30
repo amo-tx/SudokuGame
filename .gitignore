@@ -25,3 +25,9 @@ Thumbs.db
 # Native
 .cxx/
 .externalNativeBuild/
+# Build artifacts
+build_direct.bat
+debug-apk.zip
+release-apk.zip
+release_apk_extracted/
+debug_apk_extracted/

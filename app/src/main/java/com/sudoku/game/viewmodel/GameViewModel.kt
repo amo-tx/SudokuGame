@@ -1,4 +1,4 @@
-package com.sudoku.game.viewmodel
+﻿package com.sudoku.game.viewmodel
 
 import android.os.Handler
 import android.os.Looper
@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 游戏状态数据
+ * Game state data
  */
 data class GameState(
     val board: Array<IntArray>,
@@ -32,18 +32,18 @@ data class GameState(
 )
 
 /**
- * 游戏ViewModel
+ * Game ViewModel
  *
- * 管理数独游戏的完整状态和逻辑：
- *   - 新游戏生成（根据难度随机出题 + 可解性验证 + 难度验证）
- *   - 单元格选择与数字输入
- *   - 相同数字高亮
- *   - 候选栏剩余数字数量统计
- *   - 笔记模式（候选数字标记）
- *   - 提示功能（基于求解算法）
- *   - 自动解题（基于项目回溯+MRV剪枝算法）
- *   - 错误检测
- *   - 计时器
+ * Manages the complete state and logic of the Sudoku game:
+ *   - New game generation (difficulty-based + solvability verification)
+ *   - Cell selection and number input
+ *   - Same number highlighting
+ *   - Remaining count in number pad
+ *   - Note mode (candidate marking)
+ *   - Hint function (based on solver)
+ *   - Auto-solving (backtracking + MRV heuristic)
+ *   - Error detection
+ *   - Timer
  */
 class GameViewModel : ViewModel() {
 
@@ -51,7 +51,7 @@ class GameViewModel : ViewModel() {
     private val generator = SudokuGenerator()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // 完整解（用于提示和验证）
+    // Full solution (for hints and verification)
     private var solution: Array<IntArray>? = null
 
     // ---- LiveData ----
@@ -61,7 +61,7 @@ class GameViewModel : ViewModel() {
     private val _given = MutableLiveData(Array(9) { BooleanArray(9) })
     val given: LiveData<Array<BooleanArray>> = _given
 
-    private val _notes = MutableLiveData<Array<MutableSet<Int>>>(Array(81) { mutableSetOf() })
+    private val _notes = MutableLiveData(Array(81) { mutableSetOf() })
     val notes: LiveData<Array<MutableSet<Int>>> = _notes
 
     private val _selectedCell = MutableLiveData<Pair<Int, Int>?>(null)
@@ -97,18 +97,18 @@ class GameViewModel : ViewModel() {
     private val _isSolving = MutableLiveData(false)
     val isSolving: LiveData<Boolean> = _isSolving
 
-    // 计时器
+    // Timer
     private val _elapsedSeconds = MutableLiveData(0)
     val elapsedSeconds: LiveData<Int> = _elapsedSeconds
 
     private var timerRunnable: Runnable? = null
     private var timerStarted = false
 
-    // ---- 游戏逻辑 ----
+    // ---- Game logic ----
 
     /**
-     * 开始新游戏
-     * 在后台线程生成数独，确保UI不卡顿
+     * Start a new game
+     * Generates a verified Sudoku puzzle on a background thread
      */
     fun newGame(difficulty: Difficulty) {
         _isGenerating.value = true
@@ -116,10 +116,7 @@ class GameViewModel : ViewModel() {
         stopTimer()
 
         viewModelScope.launch(Dispatchers.IO) {
-            // 生成并验证难度的数独题目
             val puzzle = generator.generateVerified(difficulty)
-
-            // 求解以获取完整解（用于提示和验证）
             val result = solver.solve(puzzle)
             val sol = if (result.success) result.board else null
 
@@ -146,18 +143,18 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * 选择单元格
+     * Select a cell
      */
     fun selectCell(row: Int, col: Int) {
         _selectedCell.value = Pair(row, col)
         val value = _board.value?.get(row)?.get(col) ?: 0
         _selectedNumber.value = value
-        // 清除上一次的提示高亮
+        // Clear previous hint highlight
         _hintCell.value = null
     }
 
     /**
-     * 输入数字到选中的单元格
+     * Input a number into the selected cell
      */
     fun inputNumber(num: Int) {
         if (_isCompleted.value == true) return
@@ -165,40 +162,30 @@ class GameViewModel : ViewModel() {
         val cell = _selectedCell.value ?: return
         val (r, c) = cell
         val givens = _given.value ?: return
-        if (givens[r][c]) return // 题目给定的数字不能修改
+        if (givens[r][c]) return
 
         if (_isNoteMode.value == true) {
-            // 笔记模式：切换候选数字标记
             toggleNote(r, c, num)
         } else {
-            // 正常模式：填入数字
             val b = _board.value ?: return
             val currentValue = b[r][c]
 
-            // 再次点击相同数字则清除
             b[r][c] = if (currentValue == num) 0 else num
             _board.value = b
 
-            // 清除该格的笔记
             _notes.value?.get(r * 9 + c)?.clear()
             _notes.value = _notes.value
 
-            // 更新选中的数字
             _selectedNumber.value = b[r][c]
 
-            // 检查错误
             checkErrors()
-
-            // 更新剩余数量
             updateRemainingCounts(b)
-
-            // 检查是否完成
             checkCompletion()
         }
     }
 
     /**
-     * 擦除选中单元格的数字
+     * Erase the selected cell's value
      */
     fun erase() {
         if (_isCompleted.value == true) return
@@ -212,7 +199,6 @@ class GameViewModel : ViewModel() {
         b[r][c] = 0
         _board.value = b
 
-        // 清除笔记
         _notes.value?.get(r * 9 + c)?.clear()
         _notes.value = _notes.value
 
@@ -223,52 +209,64 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * 切换笔记模式
+     * Toggle note mode
      */
     fun toggleNoteMode() {
         _isNoteMode.value = !(_isNoteMode.value ?: false)
     }
 
     /**
-     * 提示功能
-     * 使用求解算法找到正确答案并填入
+     * Hint function - fills in a correct answer using the solver.
      *
-     * 策略：
-     *   - 如果选中了空格，填入该格的正确答案
-     *   - 如果没有选中空格，找到一个空格并填入
+     * Strategy:
+     *   - If a non-given cell is selected and it's wrong/empty, fill it with the correct answer
+     *   - If the selected cell is given or already correct, find the next empty/wrong cell
+     *   - If no cell is selected, find the first empty/wrong cell
+     *   - Prioritizes the selected cell, then scans row-by-row
      */
     fun hint() {
         if (_isCompleted.value == true) return
         val sol = solution ?: return
         val b = _board.value ?: return
+        val givens = _given.value ?: return
 
         val cell = _selectedCell.value
         if (cell != null) {
             val (r, c) = cell
-            if (_given.value?.get(r)?.get(c) == true) return
-            if (b[r][c] == sol[r][c]) {
-                // 已正确，找下一个空格
-                findAndHintEmpty(b, sol)
-            } else {
-                // 填入正确答案
+            if (!givens[r][c] && b[r][c] != sol[r][c]) {
+                // Selected cell is empty or wrong -> fill with correct answer
                 applyHint(r, c, sol[r][c], b)
+                return
             }
-        } else {
-            findAndHintEmpty(b, sol)
         }
+        // Selected cell is given, correct, or none selected -> find next empty/wrong cell
+        findAndHintEmpty(b, sol)
     }
 
+    /**
+     * Find the next empty or incorrect cell and fill it with the correct answer.
+     * Searches from the selected cell's position first, then wraps around.
+     */
     private fun findAndHintEmpty(b: Array<IntArray>, sol: Array<IntArray>) {
-        for (r in 0..8) {
-            for (c in 0..8) {
-                if (b[r][c] != sol[r][c]) {
-                    applyHint(r, c, sol[r][c], b)
-                    return
-                }
+        val givens = _given.value ?: return
+        val startR = _selectedCell.value?.first ?: 0
+        val startC = _selectedCell.value?.second ?: 0
+
+        // Search from the selected position forward, then wrap around
+        for (offset in 0..80) {
+            val idx = (startR * 9 + startC + offset) % 81
+            val r = idx / 9
+            val c = idx % 9
+            if (!givens[r][c] && b[r][c] != sol[r][c]) {
+                applyHint(r, c, sol[r][c], b)
+                return
             }
         }
     }
 
+    /**
+     * Apply a hint: fill the cell with the correct value and update all state
+     */
     private fun applyHint(r: Int, c: Int, value: Int, b: Array<IntArray>) {
         b[r][c] = value
         _board.value = b
@@ -283,8 +281,7 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * 自动解题
-     * 使用项目的回溯+MRV剪枝算法求解，逐步填入
+     * Auto-solve using backtracking + MRV, filling cells one by one with animation
      */
     fun solveAll() {
         if (_isCompleted.value == true) return
@@ -293,7 +290,6 @@ class GameViewModel : ViewModel() {
 
         if (sol != null) {
             _isSolving.value = true
-            // 逐步填入未填的格子，产生动画效果
             val cellsToFill = mutableListOf<Triple<Int, Int, Int>>()
             for (r in 0..8) {
                 for (c in 0..8) {
@@ -308,7 +304,6 @@ class GameViewModel : ViewModel() {
                 return
             }
 
-            // 逐步填入，每50ms填一个
             var index = 0
             val fillNext = object : Runnable {
                 override fun run() {
@@ -332,7 +327,6 @@ class GameViewModel : ViewModel() {
             }
             fillNext.run()
         } else {
-            // 没有缓存解，现场求解
             _isSolving.value = true
             viewModelScope.launch(Dispatchers.IO) {
                 val result = solver.solve(b)
@@ -355,8 +349,7 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * 检查当前棋盘是否有错误
-     * 错误定义：与正确解不一致的用户输入
+     * Check the board for errors (user input that doesn't match the solution)
      */
     private fun checkErrors() {
         val sol = solution ?: return
@@ -372,7 +365,6 @@ class GameViewModel : ViewModel() {
             }
         }
 
-        // 统计错误数（新增的错误）
         val prevErrors = _errorCells.value ?: emptySet()
         val newErrors = errors - prevErrors
         if (newErrors.isNotEmpty()) {
@@ -383,11 +375,10 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * 更新剩余数字数量
-     * 每个数字1-9在数独中出现9次，remaining = 9 - 已使用次数
+     * Update remaining count for each number (1-9)
      */
     private fun updateRemainingCounts(b: Array<IntArray>) {
-        val counts = IntArray(10) // counts[0] 不使用
+        val counts = IntArray(10)
         for (r in 0..8) {
             for (c in 0..8) {
                 if (b[r][c] != 0) counts[b[r][c]]++
@@ -398,7 +389,7 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * 检查是否完成
+     * Check if the puzzle is complete
      */
     private fun checkCompletion() {
         val b = _board.value ?: return
@@ -407,7 +398,6 @@ class GameViewModel : ViewModel() {
                 if (b[r][c] == 0) return
             }
         }
-        // 所有格子都填了，检查是否正确
         val sol = solution
         if (sol != null) {
             for (r in 0..8) {
@@ -424,7 +414,7 @@ class GameViewModel : ViewModel() {
     }
 
     /**
-     * 切换笔记标记
+     * Toggle a note mark
      */
     private fun toggleNote(r: Int, c: Int, num: Int) {
         val currentNotes = _notes.value ?: return
@@ -437,7 +427,7 @@ class GameViewModel : ViewModel() {
         _notes.value = currentNotes
     }
 
-    // ---- 计时器 ----
+    // ---- Timer ----
 
     private fun startTimer() {
         if (timerStarted) return
