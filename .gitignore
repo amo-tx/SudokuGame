@@ -1,11 +1,15 @@
-# Gradle
-.gradle/
+# Build artifacts
 build/
+.gradle/
+*.apk
+*.aab
+*.ap_
+*.dex
 
 # Local config
 local.properties
 
-# IntelliJ / Android Studio
+# IDE
 *.iml
 .idea/
 captures/
@@ -18,16 +22,10 @@ Thumbs.db
 *.jks
 *.keystore
 
-# APK / AAB
-*.apk
-*.aab
-
-# Native
+# Native build
 .cxx/
 .externalNativeBuild/
-# Build artifacts
-build_direct.bat
-debug-apk.zip
-release-apk.zip
-release_apk_extracted/
-debug_apk_extracted/
+
+# Temp files
+*.zip
+*.log
