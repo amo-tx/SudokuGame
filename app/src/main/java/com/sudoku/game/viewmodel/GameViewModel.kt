@@ -1,4 +1,4 @@
-﻿package com.sudoku.game.viewmodel
+package com.sudoku.game.viewmodel
 
 import android.os.Handler
 import android.os.Looper

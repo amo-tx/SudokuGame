@@ -1,4 +1,4 @@
-﻿package com.sudoku.game.view
+package com.sudoku.game.view
 
 import android.content.Context
 import android.graphics.Canvas

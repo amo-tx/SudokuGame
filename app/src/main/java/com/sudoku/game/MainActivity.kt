@@ -1,4 +1,4 @@
-﻿package com.sudoku.game
+package com.sudoku.game
 
 import android.content.SharedPreferences
 import android.graphics.Color
